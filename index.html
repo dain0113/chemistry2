@@ -15,6 +15,7 @@
             font-family: 'Noto Sans KR', sans-serif;
             user-select: none;
             -webkit-user-select: none;
+            -webkit-touch-callout: none;
             touch-action: manipulation;
         }
         
@@ -161,7 +162,7 @@
 
             <!-- MAIN ACTION PUSH BUTTON (Press & Hold) -->
             <div class="flex flex-col items-center gap-2">
-                <button id="btn-pour" class="w-full h-24 bg-gradient-to-b from-cyan-400 via-cyan-500 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-slate-950 font-black text-xl rounded-2xl shadow-xl active:scale-95 transition-all flex flex-col items-center justify-center gap-1 cursor-pointer select-none glow-effect touch-none border-t-2 border-cyan-200">
+                <button id="btn-pour" class="w-full h-24 bg-gradient-to-b from-cyan-400 via-cyan-500 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-slate-950 font-black text-xl rounded-2xl shadow-xl active:scale-95 transition-all flex flex-col items-center justify-center gap-1 cursor-pointer select-none glow-effect touch-none border-t-2 border-cyan-200" style="-webkit-touch-callout: none; -webkit-user-select: none; touch-action: none;">
                     <span class="flex items-center gap-2 text-slate-950 text-2xl">
                         <i class="fa-solid fa-hand-pointer animate-bounce"></i> 누르고 있기!
                     </span>
@@ -313,12 +314,18 @@
         let pourGain = null;
 
         function initAudio() {
-            if (!audioCtx) {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                audioCtx = new AudioContext();
-            }
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
+            try {
+                if (!audioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        audioCtx = new AudioContext();
+                    }
+                }
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume().catch(() => {});
+                }
+            } catch (e) {
+                console.log("Audio init bypassed on device", e);
             }
         }
 
@@ -694,7 +701,6 @@
         let lastPourTime = 0;
 
         function startPouring(e) {
-            if (e) e.preventDefault();
             if (gameState.isSpilled) return;
 
             initAudio();
@@ -721,7 +727,6 @@
         }
 
         function stopPouring(e) {
-            if (e) e.preventDefault();
             if (!gameState.isPouring) return;
 
             gameState.isPouring = false;
@@ -744,14 +749,40 @@
 
             const pourBtn = document.getElementById('btn-pour');
 
-            // Mouse Events
-            pourBtn.addEventListener('mousedown', startPouring);
-            window.addEventListener('mouseup', stopPouring);
+            // Universal Pointer Events (iOS iPad, Android Tablet, Stylus & Mouse)
+            pourBtn.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                try {
+                    pourBtn.setPointerCapture(e.pointerId);
+                } catch (err) {}
+                startPouring();
+            });
 
-            // Touch Events (Mobile/Tablet Support)
-            pourBtn.addEventListener('touchstart', startPouring, { passive: false });
-            window.addEventListener('touchend', stopPouring);
-            window.addEventListener('touchcancel', stopPouring);
+            pourBtn.addEventListener('pointerup', (e) => {
+                e.preventDefault();
+                try {
+                    pourBtn.releasePointerCapture(e.pointerId);
+                } catch (err) {}
+                stopPouring();
+            });
+
+            pourBtn.addEventListener('pointercancel', (e) => {
+                try {
+                    pourBtn.releasePointerCapture(e.pointerId);
+                } catch (err) {}
+                stopPouring();
+            });
+
+            // Legacy Fallbacks for older touch browsers
+            pourBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                startPouring();
+            }, { passive: false });
+
+            pourBtn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                stopPouring();
+            });
 
             // Reset Game Button
             document.getElementById('btn-reset').addEventListener('click', initGame);
