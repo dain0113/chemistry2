@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>물의 표면장력 한계 도전 게임</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        
+        .glow-effect {
+            box-shadow: 0 0 25px rgba(56, 189, 248, 0.4);
+        }
+
+        .danger-glow {
+            box-shadow: 0 0 30px rgba(244, 63, 94, 0.6);
+        }
+
+        /* Pulsing hold button animation */
+        @keyframes pulse-btn {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+            100% { transform: scale(1); }
+        }
+        .pouring-active {
+            animation: pulse-btn 0.3s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between overflow-x-hidden">
+
+    <!-- Header Navigation -->
+    <header class="w-full bg-slate-900/80 backdrop-blur border-b border-slate-800 p-4 sticky top-0 z-20">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-lg shadow-cyan-500/30">
+                    <i class="fa-solid fa-droplet text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-black text-lg md:text-xl bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                        표면장력 한계 도전!
+                    </h1>
+                    <p class="text-xs text-slate-400 hidden sm:block">즐거운 다인T의 화학수업</p>
+                </div>
+            </div>
+            
+            <div class="flex gap-2">
+                <button id="btn-science-info" class="bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs sm:text-sm px-3 py-2 rounded-xl transition flex items-center gap-1.5 font-medium">
+                    <i class="fa-solid fa-atom"></i> <span class="hidden sm:inline">과학</span> 원리
+                </button>
+                <button id="btn-open-setup" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs sm:text-sm px-3 py-2 rounded-xl transition flex items-center gap-1.5 font-medium">
+                    <i class="fa-solid fa-gear"></i> 모드 설정
+                </button>
+                <button id="btn-reset" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs sm:text-sm px-3 py-2 rounded-xl transition flex items-center gap-1.5 font-medium">
+                    <i class="fa-solid fa-rotate-right"></i> 다시하기
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-4xl w-full mx-auto p-4 flex-1 flex flex-col md:flex-row gap-6 items-center justify-center my-auto">
+        
+        <!-- Left Side: Canvas & Liquid Visualizer -->
+        <div class="w-full md:w-1/2 flex flex-col items-center justify-center">
+            <div id="canvas-container" class="relative w-full max-w-[340px] aspect-[4/5] bg-slate-900/60 rounded-3xl border border-slate-800 p-4 flex flex-col items-center justify-center shadow-2xl overflow-hidden backdrop-blur-sm">
+                
+                <!-- Tension Warning Visual Overlay -->
+                <div id="tension-warning" class="absolute inset-0 bg-red-500/10 pointer-events-none opacity-0 transition-opacity duration-200"></div>
+                
+                <!-- Live Volume Overlay Label -->
+                <div class="absolute top-4 left-4 right-4 flex justify-between items-center text-xs font-semibold text-slate-400 z-10">
+                    <span id="target-rim-label" class="bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700">
+                        컵 찰랑임 기준: <span class="text-cyan-400 font-bold">100ml</span>
+                    </span>
+                    <span id="stress-level-label" class="bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700 text-emerald-400 font-bold">
+                        장력 상태: 빈 컵
+                    </span>
+                </div>
+
+                <!-- Simulation Canvas -->
+                <canvas id="liquid-canvas" class="w-full h-full rounded-2xl cursor-pointer"></canvas>
+
+                <!-- Dynamic Burst Splash Overlay Text -->
+                <div id="spill-text" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-sm opacity-0 pointer-events-none transition-all duration-300 scale-75">
+                    <i class="fa-solid fa-burst text-red-500 text-6xl mb-2 animate-bounce"></i>
+                    <h2 class="text-3xl font-black text-red-400 mb-1">표면장력 붕괴!</h2>
+                    <p class="text-slate-300 text-sm font-medium" id="spill-reason">물이 흘러넘쳤습니다!</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side: Game Modes, Controls & Player Indicators -->
+        <div class="w-full md:w-1/2 flex flex-col gap-5 max-w-[420px]">
+            
+            <!-- Mode Selection Tabs -->
+            <div class="bg-slate-900 p-1.5 rounded-2xl border border-slate-800 flex text-sm font-semibold">
+                <button id="tab-solo" class="flex-1 py-2 rounded-xl transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md">
+                    <i class="fa-solid fa-user mr-1.5"></i> 싱글 모드
+                </button>
+                <button id="tab-multi" class="flex-1 py-2 rounded-xl text-slate-400 hover:text-slate-200 transition-all">
+                    <i class="fa-solid fa-users mr-1.5"></i> 턴제 모드 (다인용)
+                </button>
+            </div>
+
+            <!-- Single Player Info Panel -->
+            <div id="panel-solo" class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-slate-400">현재 용량:</span>
+                    <span id="current-vol-text" class="text-2xl font-black text-cyan-400">0.0 <span class="text-sm text-slate-400">ml</span></span>
+                </div>
+                <!-- Progress Gauge -->
+                <div>
+                    <div class="flex justify-between text-xs text-slate-400 mb-1">
+                        <span>수면 한계 부풀음도 (100ml 초과 시)</span>
+                        <span id="tension-percent-text" class="font-bold text-cyan-300">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden p-0.5 border border-slate-700/50">
+                        <div id="tension-bar" class="bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 h-full rounded-full transition-all duration-75 w-0"></div>
+                    </div>
+                </div>
+                <div class="text-xs text-slate-400 flex justify-between pt-1 border-t border-slate-800">
+                    <span>최고 기록 (최대 주입량):</span>
+                    <span id="high-score-text" class="font-bold text-amber-400">0.0 ml</span>
+                </div>
+            </div>
+
+            <!-- Multiplayer Info Panel (Hidden by Default) -->
+            <div id="panel-multi" class="hidden bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex-col gap-3">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs text-slate-400 font-semibold uppercase tracking-wider">현재 차례:</span>
+                    <span id="current-player-tag" class="px-3 py-1 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                        플레이어 1
+                    </span>
+                </div>
+                <div class="flex items-center justify-between text-xs text-slate-400 border-t border-slate-800 pt-2.5">
+                    <span>참여 인원 수:</span>
+                    <div class="flex gap-1.5">
+                        <button id="btn-count-4" class="px-3 py-1 rounded-lg border font-bold transition bg-cyan-500 text-slate-950 border-cyan-400">4명</button>
+                        <button id="btn-count-5" class="px-3 py-1 rounded-lg border font-bold transition bg-slate-800 text-slate-400 border-slate-700 hover:text-white">5명</button>
+                        <button id="btn-count-6" class="px-3 py-1 rounded-lg border font-bold transition bg-slate-800 text-slate-400 border-slate-700 hover:text-white">6명</button>
+                    </div>
+                </div>
+                <div class="flex gap-2 my-1" id="players-avatars">
+                    <!-- Dynamic multi-player status circles -->
+                </div>
+                <p class="text-xs text-slate-400 leading-relaxed bg-slate-800/50 p-2.5 rounded-xl border border-slate-800">
+                    💡 **규칙**: 각 학생은 누르고 있는 시간 동안 물을 따릅니다. 최소 0.2초 이상 물을 채워야 다음 학생으로 순서가 넘어갑니다. 물을 넘치게 만든 사람이 패배합니다!
+                </p>
+            </div>
+
+            <!-- MAIN ACTION PUSH BUTTON (Press & Hold) -->
+            <div class="flex flex-col items-center gap-2">
+                <button id="btn-pour" class="w-full h-24 bg-gradient-to-b from-cyan-400 via-cyan-500 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-slate-950 font-black text-xl rounded-2xl shadow-xl active:scale-95 transition-all flex flex-col items-center justify-center gap-1 cursor-pointer select-none glow-effect touch-none border-t-2 border-cyan-200">
+                    <span class="flex items-center gap-2 text-slate-950 text-2xl">
+                        <i class="fa-solid fa-hand-pointer animate-bounce"></i> 누르고 있기!
+                    </span>
+                    <span id="pour-hint-text" class="text-xs font-semibold text-slate-900/80">손을 떼면 물 주입이 멈춥니다</span>
+                </button>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Initial Game Setup Modal -->
+    <div id="modal-setup" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-opacity duration-300">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl relative flex flex-col gap-5">
+            <div class="text-center">
+                <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 mx-auto flex items-center justify-center text-white text-3xl shadow-lg shadow-cyan-500/30 mb-3">
+                    <i class="fa-solid fa-droplet"></i>
+                </div>
+                <h2 class="text-2xl font-black text-white">표면장력 한계 도전!</h2>
+                <p class="text-xs text-slate-400 mt-1">게임 모드와 인원을 설정하고 시작하세요</p>
+            </div>
+
+            <div class="space-y-4">
+                <!-- Mode Choice -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">1. 게임 모드 선택</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="setup-mode-solo" class="py-3 px-4 rounded-2xl border-2 border-cyan-500 bg-cyan-500/10 text-cyan-300 font-bold flex flex-col items-center gap-1 transition">
+                            <i class="fa-solid fa-user text-xl"></i>
+                            <span>싱글 모드</span>
+                            <span class="text-[10px] text-slate-400 font-normal">한계 기록 측정</span>
+                        </button>
+                        <button id="setup-mode-multi" class="py-3 px-4 rounded-2xl border-2 border-slate-800 bg-slate-800/50 text-slate-400 font-bold flex flex-col items-center gap-1 hover:border-slate-700 transition">
+                            <i class="fa-solid fa-users text-xl"></i>
+                            <span>다인용 턴제 모드</span>
+                            <span class="text-[10px] text-slate-400 font-normal">학생 그룹 복불복</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Player Count Selection (Visible when Multi selected) -->
+                <div id="setup-player-count-section" class="hidden">
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">2. 참여 학생 수 선택</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button id="setup-count-4" class="py-2.5 rounded-xl font-bold border-2 border-cyan-500 bg-cyan-500 text-slate-950 transition">4명</button>
+                        <button id="setup-count-5" class="py-2.5 rounded-xl font-bold border-2 border-slate-800 bg-slate-800 text-slate-400 hover:text-white transition">5명</button>
+                        <button id="setup-count-6" class="py-2.5 rounded-xl font-bold border-2 border-slate-800 bg-slate-800 text-slate-400 hover:text-white transition">6명</button>
+                    </div>
+                </div>
+            </div>
+
+            <button id="btn-start-game" class="w-full py-4 bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-black text-lg rounded-2xl shadow-lg hover:brightness-110 active:scale-98 transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-play"></i> 게임 시작하기
+            </button>
+        </div>
+    </div>
+
+    <!-- Educational Science Explanation Modal -->
+    <div id="modal-science" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative flex flex-col gap-4">
+            <button id="btn-close-science" class="absolute top-4 right-4 text-slate-400 hover:text-white w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 text-2xl">
+                    <i class="fa-solid fa-atom"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">물의 표면장력 원리</h3>
+                    <p class="text-xs text-slate-400">왜 물은 컵 위로 부풀어 올라도 안 쏟아질까요?</p>
+                </div>
+            </div>
+
+            <div class="space-y-3 text-sm text-slate-300 leading-relaxed max-h-[60vh] overflow-y-auto pr-1">
+                <div class="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/50">
+                    <h4 class="font-bold text-cyan-300 mb-1 flex items-center gap-2">
+                        <i class="fa-solid fa-link text-xs"></i> 1. 분자 간 응집력 (Cohesive Force)
+                    </h4>
+                    <p class="text-xs text-slate-300">
+                        물 분자들은 극성 구조 때문에 서로를 강력하게 끌어당깁니다(수소 결합). 액체 내부의 분자들은 사방에서 끌어당겨지지만, **수면에 있는 물 분자들은 내부와 옆쪽으로만 끌려** 들어갑니다.
+                    </p>
+                </div>
+
+                <div class="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/50">
+                    <h4 class="font-bold text-cyan-300 mb-1 flex items-center gap-2">
+                        <i class="fa-solid fa-shield-halved text-xs"></i> 2. 수막(막) 같은 볼록함 (Meniscus)
+                    </h4>
+                    <p class="text-xs text-slate-300">
+                        이로 인해 물 수면은 마치 팽팽하게 당겨진 탄성 고무막처럼 행동합니다. 컵 경계보다 물이 많아져도 이 **표면장력(Surface Tension)** 덕분에 당장 쏟아지지 않고 볼록한 돔(Dome) 형태를 유지합니다.
+                    </p>
+                </div>
+
+                <div class="bg-slate-800/60 p-3.5 rounded-2xl border border-slate-700/50">
+                    <h4 class="font-bold text-amber-400 mb-1 flex items-center gap-2">
+                        <i class="fa-solid fa-triangle-exclamation text-xs"></i> 3. 표면장력 한계선과 붕괴
+                    </h4>
+                    <p class="text-xs text-slate-300">
+                        주입량이 늘어나 중력으로 눌리는 힘이 분자 인력을 초과하면, 한순간 수막이 찢어지며 순식간에 외벽을 타고 물이 넘쳐흐르게 됩니다!
+                    </p>
+                </div>
+            </div>
+
+            <button id="btn-confirm-science" class="w-full bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold py-3 rounded-xl transition">
+                알겠습니다! 게임으로 돌아가기
+            </button>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full text-center py-3 text-xs text-slate-500 border-t border-slate-900">
+        소래고등학교 물질과 에너지
+    </footer>
+
+    <script>
+        // Game Configuration & State
+        const CONFIG = {
+            baseRimVolume: 100.0,     // ml capacity at edge of glass
+            minMaxTension: 118.0,     // Minimum limit where tension breaks
+            maxMaxTension: 135.0,     // Maximum limit where tension breaks (randomized per game)
+            pourRatePerSec: 18.0      // Volume filled per second of holding
+        };
+
+        let gameState = {
+            currentVolume: 0.0,
+            maxTensionLimit: 125.0,   // Set dynamically on game start
+            isPouring: false,
+            isSpilled: false,
+            mode: 'solo',             // 'solo' or 'multi'
+            highScore: 0.0,
+            
+            // Multiplayer state
+            multiPlayersCount: 4,
+            activePlayerIndex: 0,
+            playerPourTimeInTurn: 0,  // Tracking minimum pour threshold per player turn
+            playersEliminated: []
+        };
+
+        // Canvas & Visual Elements
+        const canvas = document.getElementById('liquid-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        let lastTimestamp = 0;
+        let wobblePhase = 0;
+        let droplets = []; // Particle drops during pouring
+
+        // Audio Engine (Web Audio API Synthesizer)
+        let audioCtx = null;
+        let pourOscillator = null;
+        let pourGain = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function startPourSound() {
+            if (!audioCtx) return;
+            try {
+                pourOscillator = audioCtx.createOscillator();
+                pourGain = audioCtx.createGain();
+
+                // Pitch rises smoothly as total liquid level rises
+                const fillRatio = Math.min(1.5, gameState.currentVolume / CONFIG.baseRimVolume);
+                const freq = 180 + fillRatio * 350;
+
+                pourOscillator.type = 'sine';
+                pourOscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+                pourGain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+
+                pourOscillator.connect(pourGain);
+                pourGain.connect(audioCtx.destination);
+
+                pourOscillator.start();
+            } catch (e) {
+                console.log("Audio play error", e);
+            }
+        }
+
+        function updatePourSound() {
+            if (pourOscillator && audioCtx) {
+                const fillRatio = Math.min(1.5, gameState.currentVolume / CONFIG.baseRimVolume);
+                const freq = 180 + fillRatio * 350 + Math.sin(Date.now() / 50) * 12;
+                pourOscillator.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            }
+        }
+
+        function stopPourSound() {
+            if (pourGain && audioCtx) {
+                try {
+                    pourGain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.1);
+                    setTimeout(() => {
+                        if (pourOscillator) {
+                            pourOscillator.stop();
+                            pourOscillator.disconnect();
+                        }
+                    }, 100);
+                } catch (e) {}
+            }
+        }
+
+        function playSpillSound() {
+            if (!audioCtx) return;
+            try {
+                // Splash noise synthesis
+                const bufferSize = audioCtx.sampleRate * 0.5;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+
+                const noise = audioCtx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(1000, audioCtx.currentTime);
+                filter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.5);
+
+                const gain = audioCtx.createGain();
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                noise.start();
+            } catch (e) {}
+        }
+
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+        }
+
+        function drawSimulation(timestamp) {
+            if (!lastTimestamp) lastTimestamp = timestamp;
+            const dt = (timestamp - lastTimestamp) / 1000;
+            lastTimestamp = timestamp;
+
+            const width = canvas.width;
+            const height = canvas.height;
+            ctx.clearRect(0, 0, width, height);
+
+            // Glass Dimensions
+            const glassMarginX = width * 0.22;
+            const glassTopY = height * 0.32;
+            const glassBottomY = height * 0.88;
+            const glassWidthTop = width - (glassMarginX * 2);
+            const glassWidthBottom = glassWidthTop * 0.8;
+            const glassBottomX = (width - glassWidthBottom) / 2;
+
+            ctx.save();
+
+            // Calculate height of liquid fill starting from bottom (0ml) to top rim (100ml)
+            const fillRatio = Math.min(1.0, gameState.currentVolume / CONFIG.baseRimVolume);
+            const currentLiquidLevelY = glassBottomY - (glassBottomY - glassTopY) * fillRatio;
+
+            // Interpolate surface width at current liquid level inside tapered glass
+            const surfaceWidth = glassWidthBottom + (glassWidthTop - glassWidthBottom) * fillRatio;
+            const surfaceLeftX = (width - surfaceWidth) / 2;
+            const surfaceRightX = surfaceLeftX + surfaceWidth;
+
+            // Gradient for water
+            const liquidGradient = ctx.createLinearGradient(0, glassTopY, 0, glassBottomY);
+            liquidGradient.addColorStop(0, '#38bdf8'); // Cyan-400
+            liquidGradient.addColorStop(0.5, '#0284c7'); // Sky-600
+            liquidGradient.addColorStop(1, '#1e3a8a'); // Blue-900
+
+            // Fill Main Glass Body Liquid Path up to current level
+            if (gameState.currentVolume > 0) {
+                ctx.beginPath();
+                ctx.moveTo(surfaceLeftX, currentLiquidLevelY);
+                ctx.lineTo(surfaceRightX, currentLiquidLevelY);
+                ctx.lineTo(glassBottomX + glassWidthBottom, glassBottomY);
+                ctx.lineTo(glassBottomX, glassBottomY);
+                ctx.closePath();
+                
+                ctx.fillStyle = liquidGradient;
+                ctx.globalAlpha = 0.85;
+                ctx.fill();
+            }
+
+            // Draw Dynamic Surface Meniscus (Surface Tension Dome) when filled above rim (>100ml)
+            if (!gameState.isSpilled) {
+                if (gameState.currentVolume > CONFIG.baseRimVolume) {
+                    const overflowVol = gameState.currentVolume - CONFIG.baseRimVolume;
+                    const maxOverflow = CONFIG.maxMaxTension - CONFIG.baseRimVolume;
+                    const tensionProgress = overflowVol / maxOverflow; // 0.0 to ~1.0
+
+                    // Dome bulge height in pixels
+                    const maxDomeHeight = height * 0.16;
+                    const currentDomeHeight = tensionProgress * maxDomeHeight;
+
+                    // Wobble instability effect increases as surface tension reaches threshold
+                    wobblePhase += dt * (3 + tensionProgress * 15);
+                    const wobbleAmp = tensionProgress * (2 + tensionProgress * 6) * Math.sin(wobblePhase);
+
+                    ctx.beginPath();
+                    ctx.moveTo(glassMarginX, glassTopY);
+
+                    // Quad Bezier Curve for surface tension dome
+                    const controlX = width / 2;
+                    const controlY = glassTopY - currentDomeHeight + wobbleAmp;
+
+                    ctx.quadraticCurveTo(controlX, controlY, width - glassMarginX, glassTopY);
+                    ctx.closePath();
+
+                    // Meniscus highlight shader
+                    const meniscusGradient = ctx.createLinearGradient(0, controlY, 0, glassTopY);
+                    meniscusGradient.addColorStop(0, '#7dd3fc');
+                    meniscusGradient.addColorStop(1, '#0284c7');
+
+                    ctx.fillStyle = meniscusGradient;
+                    ctx.fill();
+
+                    // Draw surface tension elastic shine arc
+                    if (tensionProgress > 0.05) {
+                        ctx.beginPath();
+                        ctx.quadraticCurveTo.call(ctx, glassMarginX + 10, glassTopY - 2, controlX, controlY + 4 + wobbleAmp, width - glassMarginX - 10, glassTopY - 2);
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+                        ctx.lineWidth = 3 * window.devicePixelRatio;
+                        ctx.stroke();
+                    }
+                }
+            } else {
+                // Render Spill Overflow Effect down the sides
+                ctx.beginPath();
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.7)';
+                // Water streaming down left
+                ctx.fillRect(glassMarginX - 12, glassTopY, 12, height * 0.5);
+                // Water streaming down right
+                ctx.fillRect(width - glassMarginX, glassTopY, 12, height * 0.5);
+                
+                // Pool at bottom
+                ctx.ellipse(width / 2, glassBottomY + 15, width * 0.45, 15, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            if (gameState.isPouring && !gameState.isSpilled) {
+                if (Math.random() < 0.6) {
+                    droplets.push({
+                        x: width / 2 + (Math.random() - 0.5) * 20,
+                        y: 10,
+                        vy: 8 + Math.random() * 4,
+                        radius: (2 + Math.random() * 3) * window.devicePixelRatio
+                    });
+                }
+            }
+
+            // Update & Render Droplets
+            ctx.fillStyle = '#7dd3fc';
+            for (let i = droplets.length - 1; i >= 0; i--) {
+                const d = droplets[i];
+                d.y += d.vy;
+                
+                ctx.beginPath();
+                ctx.arc(d.x, d.y, d.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Remove when reaching current liquid top level
+                if (d.y >= currentLiquidLevelY) {
+                    droplets.splice(i, 1);
+                }
+            }
+
+            // Draw Glass Cup Container Outline (Glass Effect)
+            ctx.beginPath();
+            ctx.moveTo(glassMarginX - 4, glassTopY - 10);
+            ctx.lineTo(glassMarginX, glassTopY);
+            ctx.lineTo(glassBottomX, glassBottomY);
+            ctx.lineTo(glassBottomX + glassWidthBottom, glassBottomY);
+            ctx.lineTo(width - glassMarginX, glassTopY);
+            ctx.lineTo(width - glassMarginX + 4, glassTopY - 10);
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.lineWidth = 5 * window.devicePixelRatio;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+
+            // Glass Reflection Line
+            ctx.beginPath();
+            ctx.moveTo(glassMarginX + 15, glassTopY + 20);
+            ctx.lineTo(glassBottomX + 12, glassBottomY - 20);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.lineWidth = 4 * window.devicePixelRatio;
+            ctx.stroke();
+
+            ctx.restore();
+
+            requestAnimationFrame(drawSimulation);
+        }
+
+        function initGame() {
+            gameState.currentVolume = 0.0;
+            // Randomize surface tension limit threshold for unpredictability
+            gameState.maxTensionLimit = CONFIG.minMaxTension + Math.random() * (CONFIG.maxMaxTension - CONFIG.minMaxTension);
+            gameState.isSpilled = false;
+            gameState.isPouring = false;
+            gameState.playerPourTimeInTurn = 0;
+
+            document.getElementById('spill-text').classList.add('opacity-0', 'scale-75', 'pointer-events-none');
+            document.getElementById('tension-warning').classList.add('opacity-0');
+
+            updateUI();
+        }
+
+        function triggerSpill(reason) {
+            gameState.isSpilled = true;
+            gameState.isPouring = false;
+            stopPourSound();
+            playSpillSound();
+
+            const spillModal = document.getElementById('spill-text');
+            document.getElementById('spill-reason').innerText = reason || '표면장력 한계를 초과하여 물이 흘러넘쳤습니다!';
+            spillModal.classList.remove('opacity-0', 'scale-75', 'pointer-events-none');
+            
+            document.getElementById('tension-warning').classList.remove('opacity-0');
+
+            if (gameState.mode === 'multi') {
+                document.getElementById('spill-reason').innerText = `플레이어 ${gameState.activePlayerIndex + 1}님이 물을 넘뜨렸습니다! 💥`;
+            }
+        }
+
+        function addWater(amount) {
+            if (gameState.isSpilled) return;
+
+            gameState.currentVolume += amount;
+
+            // Check if surface tension breaks
+            if (gameState.currentVolume >= gameState.maxTensionLimit) {
+                triggerSpill();
+            } else {
+                // Update Solo High Score
+                if (gameState.mode === 'solo' && gameState.currentVolume > gameState.highScore) {
+                    gameState.highScore = gameState.currentVolume;
+                }
+            }
+
+            updateUI();
+        }
+
+        function updateUI() {
+            // Volume Text
+            document.getElementById('current-vol-text').innerHTML = `${gameState.currentVolume.toFixed(1)} <span class="text-sm text-slate-400">ml</span>`;
+            document.getElementById('high-score-text').innerText = `${gameState.highScore.toFixed(1)} ml`;
+
+            const overflowVol = Math.max(0, gameState.currentVolume - CONFIG.baseRimVolume);
+            const maxOverflow = gameState.maxTensionLimit - CONFIG.baseRimVolume;
+            const tensionPercent = Math.min(100, Math.floor((overflowVol / maxOverflow) * 100));
+
+            const tensionBar = document.getElementById('tension-bar');
+            tensionBar.style.width = `${tensionPercent}%`;
+
+            const percentLabel = document.getElementById('tension-percent-text');
+            percentLabel.innerText = `${tensionPercent}%`;
+
+            const stressLabel = document.getElementById('stress-level-label');
+            const warningOverlay = document.getElementById('tension-warning');
+
+            if (gameState.currentVolume < CONFIG.baseRimVolume) {
+                stressLabel.innerText = "장력 상태: 물 채우는 중";
+                stressLabel.className = "bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700 text-cyan-400 font-bold";
+                warningOverlay.classList.add('opacity-0');
+            } else if (tensionPercent < 40) {
+                stressLabel.innerText = "장력 상태: 찰랑거림 (안정)";
+                stressLabel.className = "bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700 text-emerald-400 font-bold";
+                warningOverlay.classList.add('opacity-0');
+            } else if (tensionPercent < 80) {
+                stressLabel.innerText = "장력 상태: 주의 (부풀어 오름)";
+                stressLabel.className = "bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700 text-amber-400 font-bold";
+                warningOverlay.classList.add('opacity-0');
+            } else {
+                stressLabel.innerText = "장력 상태: ⚠️ 한계 임박!";
+                stressLabel.className = "bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-700 text-red-400 font-bold animate-pulse";
+                warningOverlay.classList.remove('opacity-0');
+            }
+
+            // Multiplayer UI updates
+            if (gameState.mode === 'multi') {
+                const tag = document.getElementById('current-player-tag');
+                tag.innerText = `플레이어 ${gameState.activePlayerIndex + 1}`;
+                
+                // Update player count toggle buttons inside multi panel
+                [4, 5, 6].forEach(count => {
+                    const btn = document.getElementById(`btn-count-${count}`);
+                    if (btn) {
+                        if (gameState.multiPlayersCount === count) {
+                            btn.className = "px-3 py-1 rounded-lg border font-bold transition bg-cyan-500 text-slate-950 border-cyan-400";
+                        } else {
+                            btn.className = "px-3 py-1 rounded-lg border font-bold transition bg-slate-800 text-slate-400 border-slate-700 hover:text-white";
+                        }
+                    }
+                });
+
+                // Refresh player avatars
+                const container = document.getElementById('players-avatars');
+                container.innerHTML = '';
+                for (let i = 0; i < gameState.multiPlayersCount; i++) {
+                    const avatar = document.createElement('div');
+                    avatar.className = `flex-1 py-1.5 rounded-lg text-center font-bold text-xs border ${
+                        i === gameState.activePlayerIndex 
+                        ? 'bg-cyan-500 text-slate-950 border-cyan-300 shadow-md scale-105' 
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`;
+                    avatar.innerText = `P${i + 1}`;
+                    container.appendChild(avatar);
+                }
+            }
+        }
+
+        function switchTurn() {
+            if (gameState.mode !== 'multi' || gameState.isSpilled) return;
+            gameState.activePlayerIndex = (gameState.activePlayerIndex + 1) % gameState.multiPlayersCount;
+            gameState.playerPourTimeInTurn = 0;
+            updateUI();
+        }
+
+        let pourInterval = null;
+        let lastPourTime = 0;
+
+        function startPouring(e) {
+            if (e) e.preventDefault();
+            if (gameState.isSpilled) return;
+
+            initAudio();
+            gameState.isPouring = true;
+            lastPourTime = performance.now();
+
+            document.getElementById('btn-pour').classList.add('pouring-active');
+            startPourSound();
+
+            if (pourInterval) clearInterval(pourInterval);
+            pourInterval = setInterval(() => {
+                if (!gameState.isPouring || gameState.isSpilled) return;
+
+                const now = performance.now();
+                const deltaSec = (now - lastPourTime) / 1000;
+                lastPourTime = now;
+
+                const addedVol = CONFIG.pourRatePerSec * deltaSec;
+                gameState.playerPourTimeInTurn += deltaSec;
+
+                addWater(addedVol);
+                updatePourSound();
+            }, 30);
+        }
+
+        function stopPouring(e) {
+            if (e) e.preventDefault();
+            if (!gameState.isPouring) return;
+
+            gameState.isPouring = false;
+            document.getElementById('btn-pour').classList.remove('pouring-active');
+            if (pourInterval) clearInterval(pourInterval);
+            stopPourSound();
+
+            // In multi mode, pass turn if player held for at least 0.2 seconds
+            if (gameState.mode === 'multi' && !gameState.isSpilled) {
+                if (gameState.playerPourTimeInTurn >= 0.2) {
+                    switchTurn();
+                }
+            }
+        }
+
+        // Setup Buttons & Tabs Event Handling
+        document.addEventListener('DOMContentLoaded', () => {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            const pourBtn = document.getElementById('btn-pour');
+
+            // Mouse Events
+            pourBtn.addEventListener('mousedown', startPouring);
+            window.addEventListener('mouseup', stopPouring);
+
+            // Touch Events (Mobile/Tablet Support)
+            pourBtn.addEventListener('touchstart', startPouring, { passive: false });
+            window.addEventListener('touchend', stopPouring);
+            window.addEventListener('touchcancel', stopPouring);
+
+            // Reset Game Button
+            document.getElementById('btn-reset').addEventListener('click', initGame);
+
+            // Setup Modal Logic
+            const modalSetup = document.getElementById('modal-setup');
+            let selectedSetupMode = 'solo';
+            let selectedSetupCount = 4;
+
+            const setupModeSolo = document.getElementById('setup-mode-solo');
+            const setupModeMulti = document.getElementById('setup-mode-multi');
+            const setupCountSection = document.getElementById('setup-player-count-section');
+
+            function updateSetupModalUI() {
+                if (selectedSetupMode === 'solo') {
+                    setupModeSolo.className = "py-3 px-4 rounded-2xl border-2 border-cyan-500 bg-cyan-500/10 text-cyan-300 font-bold flex flex-col items-center gap-1 transition";
+                    setupModeMulti.className = "py-3 px-4 rounded-2xl border-2 border-slate-800 bg-slate-800/50 text-slate-400 font-bold flex flex-col items-center gap-1 hover:border-slate-700 transition";
+                    setupCountSection.classList.add('hidden');
+                } else {
+                    setupModeMulti.className = "py-3 px-4 rounded-2xl border-2 border-cyan-500 bg-cyan-500/10 text-cyan-300 font-bold flex flex-col items-center gap-1 transition";
+                    setupModeSolo.className = "py-3 px-4 rounded-2xl border-2 border-slate-800 bg-slate-800/50 text-slate-400 font-bold flex flex-col items-center gap-1 hover:border-slate-700 transition";
+                    setupCountSection.classList.remove('hidden');
+                }
+
+                [4, 5, 6].forEach(count => {
+                    const btn = document.getElementById(`setup-count-${count}`);
+                    if (btn) {
+                        if (selectedSetupCount === count) {
+                            btn.className = "py-2.5 rounded-xl font-bold border-2 border-cyan-500 bg-cyan-500 text-slate-950 transition";
+                        } else {
+                            btn.className = "py-2.5 rounded-xl font-bold border-2 border-slate-800 bg-slate-800 text-slate-400 hover:text-white transition";
+                        }
+                    }
+                });
+            }
+
+            setupModeSolo.addEventListener('click', () => {
+                selectedSetupMode = 'solo';
+                updateSetupModalUI();
+            });
+
+            setupModeMulti.addEventListener('click', () => {
+                selectedSetupMode = 'multi';
+                updateSetupModalUI();
+            });
+
+            [4, 5, 6].forEach(count => {
+                document.getElementById(`setup-count-${count}`).addEventListener('click', () => {
+                    selectedSetupCount = count;
+                    updateSetupModalUI();
+                });
+
+                // Also allow toggling inside multi panel during game
+                document.getElementById(`btn-count-${count}`).addEventListener('click', () => {
+                    gameState.multiPlayersCount = count;
+                    if (gameState.activePlayerIndex >= count) {
+                        gameState.activePlayerIndex = 0;
+                    }
+                    updateUI();
+                });
+            });
+
+            document.getElementById('btn-start-game').addEventListener('click', () => {
+                gameState.mode = selectedSetupMode;
+                gameState.multiPlayersCount = selectedSetupCount;
+                gameState.activePlayerIndex = 0;
+
+                // Update main window tabs
+                if (gameState.mode === 'solo') {
+                    tabSolo.className = 'flex-1 py-2 rounded-xl transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md';
+                    tabMulti.className = 'flex-1 py-2 rounded-xl text-slate-400 hover:text-slate-200 transition-all';
+                    panelSolo.classList.remove('hidden');
+                    panelMulti.classList.add('hidden');
+                    panelMulti.classList.remove('flex');
+                } else {
+                    tabMulti.className = 'flex-1 py-2 rounded-xl transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md';
+                    tabSolo.className = 'flex-1 py-2 rounded-xl text-slate-400 hover:text-slate-200 transition-all';
+                    panelSolo.classList.add('hidden');
+                    panelMulti.classList.remove('hidden');
+                    panelMulti.classList.add('flex');
+                }
+
+                modalSetup.classList.add('opacity-0', 'pointer-events-none');
+                initGame();
+            });
+
+            document.getElementById('btn-open-setup').addEventListener('click', () => {
+                modalSetup.classList.remove('opacity-0', 'pointer-events-none');
+            });
+
+            // Tab Switching
+            const tabSolo = document.getElementById('tab-solo');
+            const tabMulti = document.getElementById('tab-multi');
+            const panelSolo = document.getElementById('panel-solo');
+            const panelMulti = document.getElementById('panel-multi');
+
+            tabSolo.addEventListener('click', () => {
+                gameState.mode = 'solo';
+                tabSolo.className = 'flex-1 py-2 rounded-xl transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md';
+                tabMulti.className = 'flex-1 py-2 rounded-xl text-slate-400 hover:text-slate-200 transition-all';
+                panelSolo.classList.remove('hidden');
+                panelMulti.classList.add('hidden');
+                panelMulti.classList.remove('flex');
+                initGame();
+            });
+
+            tabMulti.addEventListener('click', () => {
+                gameState.mode = 'multi';
+                tabMulti.className = 'flex-1 py-2 rounded-xl transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md';
+                tabSolo.className = 'flex-1 py-2 rounded-xl text-slate-400 hover:text-slate-200 transition-all';
+                panelSolo.classList.add('hidden');
+                panelMulti.classList.remove('hidden');
+                panelMulti.classList.add('flex');
+                initGame();
+            });
+
+            // Modal Controls
+            const modalScience = document.getElementById('modal-science');
+            document.getElementById('btn-science-info').addEventListener('click', () => {
+                modalScience.classList.remove('opacity-0', 'pointer-events-none');
+            });
+            document.getElementById('btn-close-science').addEventListener('click', () => {
+                modalScience.classList.add('opacity-0', 'pointer-events-none');
+            });
+            document.getElementById('btn-confirm-science').addEventListener('click', () => {
+                modalScience.classList.add('opacity-0', 'pointer-events-none');
+            });
+
+            // Initialize game physics loop
+            initGame();
+            requestAnimationFrame(drawSimulation);
+        });
+    </script>
+</body>
+</html>
